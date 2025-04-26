@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Homework Helper</title>
+</head>
+<body>
+  <h1>Homework Helper</h1>
+  <form method="POST">
+    <label>Enter Text:</label><br>
+    <textarea name="text" rows="5" cols="50" required></textarea><br><br>
+    <input type="submit" value="Generate Handwriting">
+  </form>
+
+  {% if output_image %}
+    <h2>Generated Handwriting:</h2>
+    <img src="{{ output_image }}" alt="Output Image"><br>
+    <a href="/download">Download Image</a>
+  {% endif %}
+</body>
+</html>
