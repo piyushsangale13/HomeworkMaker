@@ -41,13 +41,17 @@ def image_to_outline(img_path):
 
     return contours, (h, w), border
 
-def contour_to_glyph(glyph, contours, img_shape, border):
+def contour_to_glyph(glyph, contours, img_shape, border, scale_factor=1.5):
     """
     Given contours in the inset image, shift them back into
-    the full image coordinate space and draw into the glyph.
+    the full image coordinate space and scale them to enlarge,
+    then draw into the glyph.
     """
     pen = glyph.getPen()
     h = img_shape[0]
+
+    # Calculate the bounding box of the contour to set glyph width
+    min_x, min_y, max_x, max_y = float('inf'), float('inf'), float('-inf'), float('-inf')
 
     for contour in contours:
         if cv2.contourArea(contour) < 20:
@@ -62,13 +66,32 @@ def contour_to_glyph(glyph, contours, img_shape, border):
             # flip Y (font coords)
             y = h - y
 
+            # Scale the coordinates by the scaling factor
+            x *= scale_factor
+            y *= scale_factor
+
             if first:
                 pen.moveTo((x, y))
                 first = False
             else:
                 pen.lineTo((x, y))
 
+            # Update the bounding box with the scaled coordinates
+            min_x = min(min_x, x)
+            max_x = max(max_x, x)
+            min_y = min(min_y, y)
+            max_y = max(max_y, y)
+
         pen.closePath()
+
+    # Set the width of the glyph based on the scaled bounding box
+    glyph_width = max_x - min_x
+
+    # Optionally add some extra spacing to avoid overlap
+    glyph_width += 100  # You can adjust this value to control the spacing
+
+    # Set the advance width for the glyph (spacing between letters)
+    glyph.width = glyph_width
 
 def build_font():
     ufo = Font()
@@ -97,7 +120,7 @@ def build_font():
                 glyph.unicodes = [ord(ch)]
 
             contours, shape, border = image_to_outline(path)
-            contour_to_glyph(glyph, contours, shape, border)
+            contour_to_glyph(glyph, contours, shape, border, scale_factor=4.0)  # Set the scale factor here
             print(f"✅ Added {glyph_name}")
 
             if i > 1:
