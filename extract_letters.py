@@ -3,7 +3,7 @@ import fitz               # PyMuPDF
 from PIL import Image, ImageDraw
 import os
 
-def extract_letters(pdf_path="handwriting_template_filled_3.pdf",
+def extract_letters(pdf_path="handwriting_template_filled.pdf",
                     output_dir="images",
                     dpi=300,
                     debug=False):

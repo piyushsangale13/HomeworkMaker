@@ -1,99 +1,146 @@
 import os
-from PIL import Image
-import cv2
-import numpy as np
+import shutil  # This module allows us to delete directories
+
+from svgpathtools import svg2paths
+from svgpathtools import Line, QuadraticBezier, CubicBezier
 from ufoLib2 import Font
 from fontmake.font_project import FontProject
 
-# ============ SETTINGS ============
-IMAGE_FOLDER   = "images"
+# Settings
+IMAGE_FOLDER   = "svgs"  # Folder containing SVGs
 FONT_NAME      = "MyHandwriting"
 OUTPUT_STYLE   = "Regular"
 USE_CHARACTERS = "abcdefghijklmnopqrstuvwxyz"
 VARIANTS       = 3
-# ==================================
 
-def image_to_outline(img_path):
-    """
-    Load grayscale image, inset by a border to remove the box outline,
-    then threshold+blur and return handwriting contours.
-    """
-    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    h, w = img.shape
+TARGET_HEIGHT  = 600  # 👈 Desired height (ascender area). Adjust as needed
 
-    # inset by 5% of min dimension (to drop the rectangle border)
-    border = int(min(h, w) * 0.05)
-    inner = img[border:h-border, border:w-border]
+def interpolate(p1, p2, t):
+    x1, y1 = p1
+    x2, y2 = p2
+    return (x1 * (1 - t) + x2 * t, y1 * (1 - t) + y2 * t)
 
-    # blur + Otsu threshold for clean binary
-    blur = cv2.GaussianBlur(inner, (5, 5), 0)
-    _, thresh = cv2.threshold(
-        blur, 0, 255,
-        cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU
-    )
+def subdivide_cubic(p0, p1, p2, p3, steps=8):
+    curve_points = []
+    for i in range(steps + 1):
+        t = i / steps
+        p01 = interpolate(p0, p1, t)
+        p12 = interpolate(p1, p2, t)
+        p23 = interpolate(p2, p3, t)
+        p012 = interpolate(p01, p12, t)
+        p123 = interpolate(p12, p23, t)
+        p0123 = interpolate(p012, p123, t)
+        curve_points.append(p0123)
+    return curve_points
 
-    # find contours of handwriting
-    contours, _ = cv2.findContours(
-        thresh,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE
-    )
+def subdivide_quadratic(p0, p1, p2, steps=8):
+    curve_points = []
+    for i in range(steps + 1):
+        t = i / steps
+        p01 = interpolate(p0, p1, t)
+        p12 = interpolate(p1, p2, t)
+        p012 = interpolate(p01, p12, t)
+        curve_points.append(p012)
+    return curve_points
 
-    return contours, (h, w), border
+def svg_to_glyph(glyph, svg_path):
+    paths, _ = svg2paths(svg_path)
 
-def contour_to_glyph(glyph, contours, img_shape, border, scale_factor=1.5):
-    """
-    Given contours in the inset image, shift them back into
-    the full image coordinate space and scale them to enlarge,
-    then draw into the glyph.
-    """
+    if not paths:
+        print(f"⚠️ No paths found in {svg_path}")
+        return
+
+    # Find bounding box
+    min_x = min_y = float('inf')
+    max_x = max_y = float('-inf')
+
+    for path in paths:
+        for segment in path:
+            for point in segment:
+                x, y = point.real, point.imag
+                min_x = min(min_x, x)
+                max_x = max(max_x, x)
+                min_y = min(min_y, y)
+                max_y = max(max_y, y)
+
+    width  = max_x - min_x
+    height = max_y - min_y
+
+    if width == 0 or height == 0:
+        print(f"⚠️ Empty path in {svg_path}")
+        return
+
+    # Dynamic scale to fit TARGET_HEIGHT
+    scale_factor = TARGET_HEIGHT / height
+
+    offset = complex(-min_x, -min_y)
+
     pen = glyph.getPen()
-    h = img_shape[0]
 
-    # Calculate the bounding box of the contour to set glyph width
-    min_x, min_y, max_x, max_y = float('inf'), float('inf'), float('-inf'), float('-inf')
-
-    for contour in contours:
-        if cv2.contourArea(contour) < 20:
-            continue  # skip tiny noise
-
-        pts = contour.reshape(-1, 2)
+    for path in paths:
         first = True
-        for x_in, y_in in pts:
-            # shift back into full image
-            x = float(x_in + border)
-            y = float(y_in + border)
-            # flip Y (font coords)
-            y = h - y
+        for segment in path:
+            segment = segment.translated(offset)
+            # segment = segment.scaled(scale_factor, -scale_factor)  # Flip Y
+            # segment = segment.translated(complex(0, TARGET_HEIGHT))  # Shift up
 
-            # Scale the coordinates by the scaling factor
-            x *= scale_factor
-            y *= scale_factor
+            if isinstance(segment, Line):
+                for point in segment:
+                    x, y = point.real, point.imag
+                    if first:
+                        pen.moveTo((x, y))
+                        first = False
+                    else:
+                        pen.lineTo((x, y))
 
-            if first:
-                pen.moveTo((x, y))
-                first = False
-            else:
-                pen.lineTo((x, y))
+            elif isinstance(segment, QuadraticBezier):
+                p0 = segment.start
+                p1 = segment.control
+                p2 = segment.end
+                curve_points = subdivide_quadratic(
+                    (p0.real, p0.imag),
+                    (p1.real, p1.imag),
+                    (p2.real, p2.imag),
+                    steps=32
+                )
+                if first:
+                    pen.moveTo(curve_points[0])
+                    first = False
+                for pt in curve_points[1:]:
+                    pen.lineTo(pt)
 
-            # Update the bounding box with the scaled coordinates
-            min_x = min(min_x, x)
-            max_x = max(max_x, x)
-            min_y = min(min_y, y)
-            max_y = max(max_y, y)
+            elif isinstance(segment, CubicBezier):
+                p0 = segment.start
+                p1 = segment.control1
+                p2 = segment.control2
+                p3 = segment.end
+                curve_points = subdivide_cubic(
+                    (p0.real, p0.imag),
+                    (p1.real, p1.imag),
+                    (p2.real, p2.imag),
+                    (p3.real, p3.imag),
+                    steps=16
+                )
+                if first:
+                    pen.moveTo(curve_points[0])
+                    first = False
+                for pt in curve_points[1:]:
+                    pen.lineTo(pt)
 
         pen.closePath()
 
-    # Set the width of the glyph based on the scaled bounding box
-    glyph_width = max_x - min_x
-
-    # Optionally add some extra spacing to avoid overlap
-    glyph_width += 100  # You can adjust this value to control the spacing
-
-    # Set the advance width for the glyph (spacing between letters)
-    glyph.width = glyph_width
+    # Set glyph width based on SVG width
+    glyph.width = int(width * scale_factor)  # 100 units padding
 
 def build_font():
+    # Check and delete existing directories/files if present
+    if os.path.exists('master__ttf'):
+        shutil.rmtree('master__ttf')
+        print("Deleted existing 'master__ttf' folder.")
+    if os.path.exists(f"{FONT_NAME}.ufo"):
+        shutil.rmtree(f"{FONT_NAME}.ufo")
+        print(f"Deleted existing '{FONT_NAME}.ufo' folder.")
+
     ufo = Font()
     ufo.info.familyName   = FONT_NAME
     ufo.info.styleName    = OUTPUT_STYLE
@@ -107,37 +154,37 @@ def build_font():
         alt_names = []
 
         for i in range(1, VARIANTS + 1):
-            fn   = f"{ch}{i}.png"
+            fn   = f"{ch}{i}.svg"
             path = os.path.join(IMAGE_FOLDER, fn)
             if not os.path.exists(path):
                 print(f"❌ Missing {fn}")
                 continue
 
-            # default glyph is 'a', alternates are 'a.alt1', 'a.alt2'
             glyph_name = ch if i == 1 else f"{ch}.alt{i-1}"
             glyph = ufo.newGlyph(glyph_name)
             if i == 1:
                 glyph.unicodes = [ord(ch)]
 
-            contours, shape, border = image_to_outline(path)
-            contour_to_glyph(glyph, contours, shape, border, scale_factor=4.0)  # Set the scale factor here
+            svg_to_glyph(glyph, path)
             print(f"✅ Added {glyph_name}")
 
             if i > 1:
                 alt_names.append(glyph_name)
 
-        # add one substitution line per alternate
         for alt in alt_names:
             feature_lines.append(f"sub {ch}' by {alt};")
 
-    # write the OpenType calt feature
     ufo.features.text = (
         "feature calt {\n    " +
         "\n    ".join(feature_lines) +
         "\n} calt;\n"
     )
 
-    # save UFO and compile to TTF
+    space = ufo.newGlyph("space")
+    space.unicodes = [ord(' ')]
+    space.width = 500
+    print("✅ Added wide space glyph")
+
     ufo_path = f"{FONT_NAME}.ufo"
     ufo.save(ufo_path)
 
