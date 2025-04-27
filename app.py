@@ -10,7 +10,7 @@ def index():
 
     if request.method == 'POST':
         text = request.form['text']
-        font_path = 'fonts/HomemadeApple.ttf'
+        font_path = 'master_ttf\MyHandwriting.ttf'
         font_size = 40
 
         # Create a blank image

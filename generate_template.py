@@ -40,6 +40,25 @@ def generate_template(characters="abcdefghijklmnopqrstuvwxyz", variants=3):
             square_y = y - grid_h + square_margin
             c.rect(square_x, square_y, square_size, square_size)
 
+            # Draw 3 faint horizontal lines inside the square
+            line_count = 2
+            line_spacing = square_size / (line_count + 1)  # Divide the square into 4 parts
+
+            # Set faint color for the lines (a very light gray, close to white)
+            c.setStrokeColorRGB(0.9, 0.9, 0.9)  # Light gray color (faint)
+
+            for i in range(line_count):
+                # Draw faint lines evenly spaced inside the square
+                line_y = square_y + (i + 1) * line_spacing  # (i + 1) avoids the base and starts inside
+                c.line(square_x, line_y, square_x + square_size, line_y)
+
+            # Reset the stroke color to black for the bottom line (square's base) and the label
+            c.setStrokeColorRGB(0, 0, 0)  # Black color for the grid, box, and label
+
+            # Draw the bottom line of the square (the base, which should not be faint)
+            bottom_line_y = square_y + square_size
+            c.line(square_x, bottom_line_y, square_x + square_size, bottom_line_y)
+
             # Draw the label above the square
             c.drawString(x + 5, y - 15, label)
 
