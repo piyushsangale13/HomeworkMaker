@@ -22,8 +22,6 @@ def generate_template(characters="abcdefghijklmnopqrstuvwxyz", variants=3):
         x = margin
         y = height - margin
 
-        c.setFont("Helvetica", 10)
-
         for _ in range(boxes_per_page):
             if box_index >= total_boxes:
                 break

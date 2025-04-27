@@ -83,8 +83,8 @@ def extract_letters(pdf_path="handwriting_template_filled.pdf",
 
                 box_idx += 1
 
-        if debug:
-            img.save(os.path.join(output_dir, f"debug_page_{page_num+1}.png"))
+        # if debug:
+        #     img.save(os.path.join(output_dir, f"debug_page_{page_num+1}.png"))
 
     print(f"✅ Extracted {box_idx} images into `{output_dir}/`")
 
