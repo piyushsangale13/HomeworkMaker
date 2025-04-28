@@ -39,7 +39,7 @@ def render_shaped_text(text, font_path, image_path, img_size=(800, 200)):
     face, glyph_info, glyph_positions = shape_text(text, font_path)
 
     # Create image
-    img = Image.new("RGB", img_size, (255, 255, 255))
+    img = Image.new("RGB", img_size, (0,0,0))
     draw = ImageDraw.Draw(img)
 
     # Start position for text rendering
