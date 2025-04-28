@@ -3,9 +3,9 @@
 <plist version="1.0">
   <dict>
     <key>ascender</key>
-    <integer>800</integer>
+    <integer>667</integer>
     <key>descender</key>
-    <integer>-200</integer>
+    <integer>-333</integer>
     <key>familyName</key>
     <string>MyHandwriting</string>
     <key>styleName</key>
