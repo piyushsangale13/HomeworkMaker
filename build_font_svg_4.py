@@ -130,58 +130,55 @@ def build_font():
 
     feature_lines = []
 
-    for ch in USE_CHARACTERS:
-        alt_names = []
+    default_class = []
+    alt1_class = []
+    alt2_class = []
 
+    for ch in USE_CHARACTERS:
         for i in range(1, VARIANTS + 1):
-            fn   = f"{ch}{i}.svg"
+            fn = f"{ch}{i}.svg"
             path = os.path.join(IMAGE_FOLDER, fn)
             if not os.path.exists(path):
                 print(f"❌ Missing {fn}")
                 continue
 
-            glyph_name = ch if i == 1 else f"{ch}.alt{i-1}"
+            if i == 1:
+                glyph_name = ch
+                default_class.append(glyph_name)
+            else:
+                glyph_name = f"{ch}.alt{i-1}"
+                if i == 2:
+                    alt1_class.append(glyph_name)
+                elif i == 3:
+                    alt2_class.append(glyph_name)
+
             glyph = ufo.newGlyph(glyph_name)
             if i == 1:
                 glyph.unicodes = [ord(ch)]
-
             svg_to_glyph(glyph, path)
             print(f"✅ Added {glyph_name}")
 
-            if i > 1:
-                alt_names.append(glyph_name)
-                
-        alphabet_range = "[a b c d e f g h i j k l m n o p q r s t u v w x y z]"
-        print(alt_names)
-        # print(f"[{ch}.alt1 {ch}.alt2]")
-        feature_lines.append(f"sub {ch} {ch}' by {ch}.alt1;")
-        feature_lines.append(f"sub {ch}.alt1 {ch}' by {ch}.alt2;")
-        # feature_lines.append(f"sub {ch} {ch}' by {ch}.alt1;")
-        # for alt in alt_names:
-        #     feature_lines.append(f"sub {ch}' by {alt};")
-        # for alt in alt_names:
-        #     feature_lines.append(f"sub [{ch} {ch}.alt1 {ch}.alt2] [{ch} {ch}.alt1 {ch}.alt2]' [{ch} {ch}.alt1 {ch}.alt2] by {alt};")
-        for alt in alt_names:
-            feature_lines.append(f"sub {alphabet_range} {ch}' by {alt};")
-        # for alt in alt_names:
-        #     feature_lines.append(f"sub {alphabet_range.replace(ch, '')} [{ch} {ch}.alt1 {ch}.alt2]' by {alt};")
-            
-        # Create chaining rules to rotate through variants
-        # if len(alt_names) >= 1:
-        #     sequence = [ch] + alt_names
-        #     for i in range(len(sequence)):
-        #         current = sequence[i]
-        #         next_variant = sequence[(i + 1) % len(sequence)]
-        #         feature_lines.append(f"sub {current}' {ch} by {next_variant};")
-        
-        # if ch == USE_CHARACTERS[0]:
-        #     feature_lines.insert(0, f"@all = [{USE_CHARACTERS}];")
+    # Define glyph classes
+    feature_lines.append(f"@DEFAULT = [{' '.join(default_class)}];")
+    if alt1_class:
+        feature_lines.append(f"@ALT1 = [{' '.join(alt1_class)}];")
+    if alt2_class:
+        feature_lines.append(f"@ALT2 = [{' '.join(alt2_class)}];")
 
-        # # Apply substitutions in increasing context depth
-        # sequence = [ch] + alt_names
-        # for i, variant in enumerate(sequence[1:], start=1):
-        #     context = "@all " * i
-        #     feature_lines.append(f"sub {context}{ch}' by {variant};")
+    # Add contextual alternates using chaining substitutions
+    if alt1_class and alt2_class:
+        feature_lines.append("sub @DEFAULT @DEFAULT' by @ALT1;")
+        feature_lines.append("sub @ALT1 @DEFAULT' by @ALT2;")
+
+                
+        # alphabet_range = "[a b c d e f g h i j k l m n o p q r s t u v w x y z]"
+        # print(alt_names)
+        
+        # feature_lines.append(f"sub {ch} {ch}' by {ch}.alt1;")
+        # feature_lines.append(f"sub {ch}.alt1 {ch}' by {ch}.alt2;")
+        
+        # for alt in alt_names:
+        #     feature_lines.append(f"sub {alphabet_range} {ch}' by {alt};")
 
     ufo.features.text = (
         "feature calt {\n    " +
